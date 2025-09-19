@@ -54,6 +54,30 @@ if (isset($_GET['hapus'])) {
     }
 }
 
+// DELETE FOTO SAJA (tidak hapus data mahasiswa)
+if (isset($_GET['hapus_foto'])) {
+    $id = (int)$_GET['hapus_foto'];
+    $sql = "UPDATE mahasiswa SET foto = NULL WHERE id=$id";
+    if (mysqli_query($conn, $sql)) {
+        $message = "Foto mahasiswa ID $id berhasil dihapus.";
+    } else {
+        $message = "Gagal hapus foto: " . mysqli_error($conn);
+    }
+}
+
+// DELETE MASSAL
+if (isset($_POST['hapus_massal']) && isset($_POST['selected_ids'])) {
+    $selected_ids = $_POST['selected_ids'];
+    $ids = implode(',', array_map('intval', $selected_ids));
+    $sql = "DELETE FROM mahasiswa WHERE id IN ($ids)";
+    if (mysqli_query($conn, $sql)) {
+        $count = count($selected_ids);
+        $message = "$count data mahasiswa berhasil dihapus.";
+    } else {
+        $message = "Gagal hapus massal: " . mysqli_error($conn);
+    }
+}
+
 // READ + hitung jumlah data
 $result = mysqli_query($conn, "SELECT * FROM mahasiswa ORDER BY id DESC");
 $jumlah = mysqli_num_rows($result);
@@ -139,53 +163,119 @@ if (isset($_GET['test'])) {
         <?php } ?>
     </form>
     <br>
-    <table>
-        <tr>
-            <th>No</th>
-            <th>Foto</th>
-            <th>Nama</th>
-            <th>NIM</th>
-            <th>Jurusan</th>
-            <th>Email</th>
-            <th>Aksi</th>
-        </tr>
-        <?php $no = 1;
-        if ($jumlah === 0) { ?>
+
+    <!-- Form untuk hapus massal -->
+    <form method="post" id="formHapusMassal">
+        <div style="margin-bottom:10px;">
+            <button type="button" onclick="selectAll()" style="background:#007bff;color:white;padding:5px 10px;border:none;cursor:pointer;">Pilih Semua</button>
+            <button type="button" onclick="deselectAll()" style="background:#6c757d;color:white;padding:5px 10px;border:none;cursor:pointer;">Batal Pilih</button>
+            <button type="submit" name="hapus_massal" onclick="return confirmHapusMassal()" style="background:#dc3545;color:white;padding:5px 10px;border:none;cursor:pointer;">🗑️ Hapus Terpilih</button>
+        </div>
+
+        <table>
             <tr>
-                <td colspan="7" style="text-align:center;">Belum ada data.</td>
+                <th><input type="checkbox" id="checkAll" onchange="toggleAll(this)"></th>
+                <th>No</th>
+                <th>Foto</th>
+                <th>Nama</th>
+                <th>NIM</th>
+                <th>Jurusan</th>
+                <th>Email</th>
+                <th>Aksi</th>
             </tr>
-        <?php }
-        while ($row = mysqli_fetch_assoc($result)) { ?>
-            <tr>
-                <td><?= $no++ ?></td>
-                <td>
-                    <?php if (!empty($row['foto']) && file_exists("img/" . $row['foto'])) { ?>
-                        <img src="img/<?= htmlspecialchars($row['foto']) ?>"
-                            alt="Foto <?= htmlspecialchars($row['nama']) ?>"
-                            style="width:50px;height:50px;object-fit:cover;border-radius:5px;">
-                    <?php } else { ?>
-                        <span style="color:#999;">Tidak ada foto</span>
-                    <?php } ?>
-                </td>
-                <td><?= htmlspecialchars($row['nama']) ?></td>
-                <td><?= htmlspecialchars($row['nim']) ?></td>
-                <td><?= htmlspecialchars($row['jurusan']) ?></td>
-                <td><?= htmlspecialchars($row['email'] ?? '') ?></td>
-                <td>
-                    <a href="?edit=<?= $row['id'] ?>">Edit</a> |
-                    <a href="?hapus=<?= $row['id'] ?>" onclick="return confirm('Yakin hapus?')">Hapus</a>
-                </td>
-            </tr>
-        <?php } ?>
-    </table>
+            <?php $no = 1;
+            if ($jumlah === 0) { ?>
+                <tr>
+                    <td colspan="8" style="text-align:center;">Belum ada data.</td>
+                </tr>
+            <?php }
+            while ($row = mysqli_fetch_assoc($result)) { ?>
+                <tr>
+                    <td><input type="checkbox" name="selected_ids[]" value="<?= $row['id'] ?>" class="checkbox-item"></td>
+                    <td><?= $no++ ?></td>
+                    <td>
+                        <?php if (!empty($row['foto']) && file_exists("img/" . $row['foto'])) { ?>
+                            <img src="img/<?= htmlspecialchars($row['foto']) ?>"
+                                alt="Foto <?= htmlspecialchars($row['nama']) ?>"
+                                style="width:50px;height:50px;object-fit:cover;border-radius:5px;"><br>
+                            <small>
+                                <a href="?hapus_foto=<?= $row['id'] ?>"
+                                    onclick="return confirm('Yakin hapus foto ini?')"
+                                    style="color:red;font-size:10px;">Hapus Foto</a>
+                            </small>
+                        <?php } else { ?>
+                            <span style="color:#999;">Tidak ada foto</span>
+                        <?php } ?>
+                    </td>
+                    <td><?= htmlspecialchars($row['nama']) ?></td>
+                    <td><?= htmlspecialchars($row['nim']) ?></td>
+                    <td><?= htmlspecialchars($row['jurusan']) ?></td>
+                    <td><?= htmlspecialchars($row['email'] ?? '') ?></td>
+                    <td>
+                        <a href="?edit=<?= $row['id'] ?>" style="color:blue;">✏️ Edit</a> |
+                        <a href="?hapus=<?= $row['id'] ?>"
+                            onclick="return confirm('⚠️ PERINGATAN!\n\nAnda akan menghapus data mahasiswa:\n• Nama: <?= htmlspecialchars($row['nama']) ?>\n• NIM: <?= htmlspecialchars($row['nim']) ?>\n\nData yang dihapus tidak dapat dikembalikan!\nYakin ingin melanjutkan?')"
+                            style="color:red;">🗑️ Hapus Data</a>
+                    </td>
+                </tr>
+            <?php } ?>
+        </table>
+    </form>
+
+    <script>
+        function toggleAll(source) {
+            var checkboxes = document.querySelectorAll('input[name="selected_ids[]"]');
+            for (var i = 0; i < checkboxes.length; i++) {
+                checkboxes[i].checked = source.checked;
+            }
+        }
+
+        function selectAll() {
+            var checkboxes = document.querySelectorAll('input[name="selected_ids[]"]');
+            var checkAll = document.getElementById('checkAll');
+            for (var i = 0; i < checkboxes.length; i++) {
+                checkboxes[i].checked = true;
+            }
+            checkAll.checked = true;
+        }
+
+        function deselectAll() {
+            var checkboxes = document.querySelectorAll('input[name="selected_ids[]"]');
+            var checkAll = document.getElementById('checkAll');
+            for (var i = 0; i < checkboxes.length; i++) {
+                checkboxes[i].checked = false;
+            }
+            checkAll.checked = false;
+        }
+
+        function confirmHapusMassal() {
+            var selected = document.querySelectorAll('input[name="selected_ids[]"]:checked');
+            if (selected.length === 0) {
+                alert('Pilih minimal 1 data untuk dihapus!');
+                return false;
+            }
+
+            var names = [];
+            selected.forEach(function(checkbox) {
+                var row = checkbox.closest('tr');
+                var nameCell = row.cells[3]; // Kolom nama (index 3)
+                names.push(nameCell.textContent);
+            });
+
+            var confirmation = '⚠️ PERINGATAN HAPUS MASSAL!\n\n';
+            confirmation += 'Anda akan menghapus ' + selected.length + ' data mahasiswa:\n\n';
+            for (var i = 0; i < Math.min(names.length, 5); i++) {
+                confirmation += '• ' + names[i] + '\n';
+            }
+            if (names.length > 5) {
+                confirmation += '• ... dan ' + (names.length - 5) + ' data lainnya\n';
+            }
+            confirmation += '\nData yang dihapus tidak dapat dikembalikan!\nYakin ingin melanjutkan?';
+
+            return confirm(confirmation);
+        }
+    </script>
     <br>
-    <b>Keterangan:</b>
-    <ul>
-        <li>Program CRUD ini menggunakan PHP dan MySQL.</li>
-        <li>Fitur: Tambah, Tampil, Edit, dan Hapus data mahasiswa.</li>
-        <li>Database: Import file <code>database.sql</code> ke phpMyAdmin/MySQL.</li>
-        <li>Edit dan hapus data menggunakan link pada tabel.</li>
-    </ul>
 </body>
 
 </html>
